@@ -3,453 +3,515 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Hill Climb</title>
+<title>Moto Parkour</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body { background:#000; overflow:hidden; touch-action:none; }
+body { background:#111; overflow:hidden; touch-action:none; }
 canvas { display:block; }
 #hud {
   position:fixed; top:10px; left:10px;
-  color:#fff; font:bold 18px monospace;
-  text-shadow:1px 1px 3px #000;
+  color:#fff; font:bold 16px monospace;
+  text-shadow:1px 1px 4px #000;
   pointer-events:none;
+  line-height:1.6;
 }
 #gas, #brk {
   position:fixed; bottom:30px;
-  width:120px; height:120px;
+  width:110px; height:110px;
   border-radius:50%;
-  font:bold 20px monospace;
-  color:#fff;
-  border:none;
-  cursor:pointer;
-  touch-action:manipulation;
+  font:bold 18px monospace;
+  color:#fff; border:none;
+  cursor:pointer; touch-action:manipulation;
 }
-#gas { right:30px; background:rgba(200,80,0,0.85); }
-#brk { left:30px; background:rgba(0,80,200,0.85); }
+#gas { right:30px; background:rgba(220,80,0,0.9); }
+#brk { left:30px; background:rgba(20,80,220,0.9); }
+#jmp {
+  position:fixed; bottom:160px; right:30px;
+  width:90px; height:90px;
+  border-radius:50%;
+  font:bold 18px monospace;
+  color:#fff; border:none;
+  cursor:pointer; touch-action:manipulation;
+  background:rgba(20,180,80,0.9);
+}
+#rst {
+  position:fixed; top:10px; right:10px;
+  background:rgba(0,0,0,0.6); color:#fff;
+  border:1px solid #888; border-radius:8px;
+  font:bold 14px monospace; padding:6px 12px;
+  cursor:pointer; touch-action:manipulation;
+}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="hud"><span id="dist">0</span>m &nbsp; <span id="spd">0</span>km/h &nbsp; <span id="gyrotag" style="color:#aef">📳 tap=gyro</span></div>
+<div id="hud">
+  <div>DIST: <span id="distEl">0</span>m</div>
+  <div>SPD: <span id="spdEl">0</span>km/h</div>
+  <div id="gyroEl" style="color:#88ddff">tap=gyro</div>
+  <div id="airEl" style="color:#ffdd44"></div>
+</div>
 <button id="brk">BRAKE</button>
 <button id="gas">GAS</button>
+<button id="jmp">JUMP</button>
+<button id="rst">↺</button>
 
 <script>
 var c = document.getElementById('c');
 var ctx = c.getContext('2d');
 var W, H;
-
-function resize() {
-  W = c.width = window.innerWidth;
-  H = c.height = window.innerHeight;
-}
+function resize(){ W=c.width=window.innerWidth; H=c.height=window.innerHeight; }
 resize();
 window.addEventListener('resize', resize);
 
-// terrain
-var SEG = 15;
-var TLEN = 6000;
-var pts = [];
+// ---- WORLD ----
+// platforms: {x,y,w,h}  (y is top edge, in world coords where 0=top)
+// we'll use screen-style coords: y increases downward, ground is near H
+var WORLD_W = 12000;
+var platforms = [];
+var camx = 0, camy = 0;
 
-function makeTerrain() {
-  pts = [];
-  for (var i = 0; i <= TLEN; i += SEG) {
-    var y = H - 120;
-    y += Math.sin(i * 0.007) * 40;
-    y += Math.sin(i * 0.019) * 25;
-    y += Math.sin(i * 0.041) * 12;
-    if (i > 800)  y += Math.sin((i-800)  * 0.015) * 35;
-    if (i > 2000) y += Math.sin((i-2000) * 0.011) * 45;
-    if (i > 3500) y += Math.sin((i-3500) * 0.008) * 55;
-    if (y < H - 220) y = H - 220;
-    if (y > H - 60)  y = H - 60;
-    pts.push({x: i, y: y});
+function buildMap() {
+  platforms = [];
+  // ground sections with gaps
+  var gx = 0;
+  // start flat section
+  addPlat(0, H-80, 600, 40);
+  gx = 600;
+
+  var rng = mulberry32(42);
+
+  for (var i = 0; i < 60; i++) {
+    var gap = 60 + rng() * 120;
+    var pw  = 80 + rng() * 280;
+    var dy  = (rng() - 0.5) * 180;
+    var py  = H - 80 + dy;
+    if (py < H - 400) py = H - 400;
+    if (py > H - 50)  py = H - 50;
+    gx += gap;
+    addPlat(gx, py, pw, 30 + rng()*30);
+    gx += pw;
   }
-  // smooth
-  for (var s = 0; s < 3; s++) {
-    for (var j = 1; j < pts.length - 1; j++) {
-      pts[j].y = (pts[j-1].y + pts[j].y + pts[j+1].y) / 3;
+
+  // add some ramps / angled platforms mixed in
+  // (just normal flat platforms for now — angle handled by terrain slope physics)
+}
+
+function addPlat(x, y, w, h) {
+  platforms.push({x:x, y:y, w:w, h:h});
+}
+
+// seeded RNG so map is consistent
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+}
+
+// ---- PHYSICS ----
+// Bike is a rigid body with two wheel contact points
+// When airborne: full gravity, angular velocity free
+// When grounded: wheels snap to surface, torque from slope
+
+var GRAV = 1800;   // px/s^2
+var ENGINE = 2200;
+var BRAKE_F = 1800;
+var FRICTION = 0.92; // per second multiplier base
+var MAX_VX = 900;
+
+var bike;
+
+function resetBike() {
+  bike = {
+    x: 120,       // world x of center
+    y: H - 130,   // world y of center
+    vx: 0,
+    vy: 0,
+    angle: 0,
+    angvel: 0,
+    onGround: false,
+    groundNx: 0,  // ground normal
+    groundNy: -1,
+    airTime: 0,
+    wheelbase: 34,
+    rearR: 15,
+    frontR: 14
+  };
+  camx = 0;
+  camy = 0;
+}
+
+// find platform under a point, returns {y, nx, ny} or null
+function platformAt(wx, wy, radius) {
+  var best = null;
+  var bestDist = radius + 2;
+  for (var i = 0; i < platforms.length; i++) {
+    var p = platforms[i];
+    // check if x is within platform
+    if (wx >= p.x - 4 && wx <= p.x + p.w + 4) {
+      var topY = p.y;
+      var dist = wy - topY;
+      if (dist >= -4 && dist < bestDist) {
+        bestDist = dist;
+        best = {y: topY, nx: 0, ny: -1, px: Math.max(p.x, Math.min(p.x+p.w, wx))};
+      }
+    }
+  }
+  return best;
+}
+
+function update(dt) {
+  if (dt > 0.033) dt = 0.033;
+
+  var rearX  = bike.x - Math.cos(bike.angle) * bike.wheelbase/2;
+  var rearY  = bike.y + Math.sin(bike.angle) * bike.wheelbase/2 + bike.rearR;
+  var frontX = bike.x + Math.cos(bike.angle) * bike.wheelbase/2;
+  var frontY = bike.y - Math.sin(bike.angle) * bike.wheelbase/2 + bike.frontR;
+
+  var rearHit  = platformAt(rearX,  rearY,  bike.rearR + 12);
+  var frontHit = platformAt(frontX, frontY, bike.frontR + 12);
+
+  bike.onGround = (rearHit !== null || frontHit !== null);
+
+  if (bike.onGround) {
+    bike.airTime = 0;
+
+    // figure out slope from the two contact points
+    var slope = 0;
+    if (rearHit && frontHit) {
+      slope = Math.atan2(frontHit.y - rearHit.y, bike.wheelbase);
+    } else if (rearHit) {
+      slope = bike.angle * 0.5;
+    } else {
+      slope = bike.angle * 0.5;
+    }
+
+    // snap bike y to ground
+    var groundY = 0;
+    if (rearHit && frontHit) groundY = (rearHit.y + frontHit.y)/2 - bike.rearR - 2;
+    else if (rearHit)  groundY = rearHit.y  - bike.rearR - 2 + Math.sin(slope)*bike.wheelbase/2;
+    else               groundY = frontHit.y - bike.frontR - 2 - Math.sin(slope)*bike.wheelbase/2;
+
+    bike.y += (groundY - bike.y) * 0.35;
+    bike.vy = Math.min(bike.vy, 0); // kill downward vel on ground
+
+    if (jumpPressed) {
+      bike.vy = -1200;
+      bike.angvel += bike.vx > 0 ? -2 : 2;
+      jumpPressed = false;
+    }
+
+    // drive
+    var acc = 0;
+    if (gasOn) acc = ENGINE;
+    if (brkOn) acc = -BRAKE_F;
+
+    // gravity component along slope
+    acc -= Math.sin(slope) * GRAV * 0.7;
+
+    bike.vx += acc * dt;
+    bike.vx *= Math.pow(0.88, dt);
+    if (bike.vx >  MAX_VX) bike.vx =  MAX_VX;
+    if (bike.vx < -MAX_VX/3) bike.vx = -MAX_VX/3;
+
+    // angle snaps to slope
+    bike.angvel += (slope - bike.angle) * 18 * dt;
+
+    // gyro lean on ground = speed boost / weight shift
+    if (gyroActive) {
+      var lean = gyroGamma / 45;
+      bike.angvel += lean * 3 * dt;
+    }
+
+  } else {
+    // AIRBORNE
+    bike.airTime += dt;
+    bike.vy += GRAV * dt;
+
+    // gyro = flip/rotation in air
+    if (gyroActive) {
+      var lean = gyroGamma / 45;
+      bike.angvel += lean * 8 * dt;
+    } else {
+      // keyboard: gas = wheelie spin, brake = reverse spin
+      if (gasOn)  bike.angvel -= 4 * dt;
+      if (brkOn)  bike.angvel += 4 * dt;
+    }
+
+    document.getElementById('airEl').textContent = 'AIR ' + bike.airTime.toFixed(1) + 's';
+  }
+
+  if (bike.onGround) document.getElementById('airEl').textContent = '';
+
+  bike.angvel *= Math.pow(0.85, dt);
+  bike.angle  += bike.angvel * dt * 60;
+  // clamp angle (no full flip — add crash later if wanted)
+  if (bike.angle >  1.4) { bike.angle =  1.4; bike.angvel *= -0.3; }
+  if (bike.angle < -1.4) { bike.angle = -1.4; bike.angvel *= -0.3; }
+
+  bike.x += bike.vx * dt;
+  bike.y += bike.vy * dt;
+
+  // floor (void)
+  if (bike.y > H + 200) {
+    resetBike();
+    return;
+  }
+
+  // camera
+  var tcx = bike.x - W * 0.35;
+  var tcy = bike.y - H * 0.55;
+  if (tcx < 0) tcx = 0;
+  camx += (tcx - camx) * 0.1;
+  camy += (tcy - camy) * 0.1;
+
+  document.getElementById('distEl').textContent = Math.floor(bike.x / 6);
+  document.getElementById('spdEl').textContent  = Math.floor(Math.abs(bike.vx) * 0.06);
+}
+
+// ---- DRAW ----
+function drawBg() {
+  // dark urban sky
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, W, H);
+  // stars
+  ctx.fillStyle = '#ffffff';
+  for (var i = 0; i < 60; i++) {
+    var sx = (i * 173 + 7) % W;
+    var sy = (i * 97  + 3) % (H * 0.6);
+    ctx.fillRect(sx, sy, 1.5, 1.5);
+  }
+  // distant city silhouette
+  ctx.fillStyle = '#2a2a4a';
+  var buildings = [
+    [0,120,60,200],[80,80,50,160],[140,100,70,180],[230,60,40,140],
+    [290,90,80,170],[390,70,55,150],[460,110,65,190],[540,50,45,130],
+    [600,85,75,165],[700,65,50,145],[770,95,60,175],[850,55,70,135]
+  ];
+  for (var i = 0; i < buildings.length; i++) {
+    var b = buildings[i];
+    var bx2 = b[0] - camx * 0.05;
+    ctx.fillRect(bx2, H - b[3], b[2], b[3]);
+    // windows
+    ctx.fillStyle = '#ffee88';
+    for (var wy = H - b[3] + 10; wy < H - 10; wy += 18) {
+      for (var wx2 = bx2 + 6; wx2 < bx2 + b[2] - 6; wx2 += 14) {
+        if (Math.random() > 0.4) ctx.fillRect(wx2, wy, 6, 8);
+      }
+    }
+    ctx.fillStyle = '#2a2a4a';
+  }
+}
+
+function drawPlatforms() {
+  for (var i = 0; i < platforms.length; i++) {
+    var p = platforms[i];
+    var sx = p.x - camx;
+    var sy = p.y - camy;
+    if (sx > W + 50 || sx + p.w < -50) continue;
+
+    // concrete base
+    ctx.fillStyle = '#555566';
+    ctx.fillRect(sx, sy, p.w, p.h);
+    // top edge highlight
+    ctx.fillStyle = '#8888aa';
+    ctx.fillRect(sx, sy, p.w, 4);
+    // edge markings
+    ctx.fillStyle = '#ff8800';
+    ctx.fillRect(sx,          sy, 8, p.h);
+    ctx.fillRect(sx + p.w - 8, sy, 8, p.h);
+    // stripe pattern on top
+    ctx.fillStyle = '#ffcc00';
+    for (var s = 0; s < p.w; s += 30) {
+      ctx.fillRect(sx + s, sy, 12, 4);
     }
   }
 }
 
-function ty(wx) {
-  if (wx <= 0) return pts[0].y;
-  if (wx >= TLEN) return pts[pts.length-1].y;
-  var i = Math.floor(wx / SEG);
-  if (i >= pts.length - 1) i = pts.length - 2;
-  var t = (wx - pts[i].x) / SEG;
-  return pts[i].y * (1-t) + pts[i+1].y * t;
+function drawBike() {
+  var sx = bike.x - camx;
+  var sy = bike.y - camy;
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.rotate(bike.angle);
+
+  // exhaust
+  ctx.strokeStyle = '#888'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-8,4); ctx.lineTo(-24,7); ctx.lineTo(-28,14); ctx.stroke();
+  if (gasOn && bike.onGround) {
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = '#aaa';
+    ctx.beginPath(); ctx.arc(-33,14,5,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-40,12,6,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // swingarm
+  ctx.strokeStyle = '#444'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(-4,5); ctx.lineTo(-20,9); ctx.stroke();
+
+  // front fork
+  ctx.strokeStyle = '#888'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(8,-10); ctx.lineTo(20,8); ctx.stroke();
+
+  // rear wheel
+  ctx.fillStyle = '#111';
+  ctx.beginPath(); ctx.arc(-20,9,bike.rearR,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#444'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.arc(-20,9,bike.rearR,0,Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = '#666'; ctx.lineWidth = 2;
+  for (var t=0;t<6;t++){var a=t/6*Math.PI*2; ctx.beginPath(); ctx.arc(-20,9,bike.rearR,a,a+0.25); ctx.stroke();}
+  ctx.fillStyle = '#bbb'; ctx.beginPath(); ctx.arc(-20,9,5,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(-20,9,2,0,Math.PI*2); ctx.fill();
+
+  // front wheel
+  ctx.fillStyle = '#111';
+  ctx.beginPath(); ctx.arc(20,9,bike.frontR,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#444'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.arc(20,9,bike.frontR,0,Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = '#666'; ctx.lineWidth = 2;
+  for (var t=0;t<6;t++){var a=t/6*Math.PI*2; ctx.beginPath(); ctx.arc(20,9,bike.frontR,a,a+0.25); ctx.stroke();}
+  ctx.fillStyle = '#bbb'; ctx.beginPath(); ctx.arc(20,9,5,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(20,9,2,0,Math.PI*2); ctx.fill();
+
+  // frame
+  ctx.strokeStyle = '#222'; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(-20,7); ctx.lineTo(-4,-12); ctx.lineTo(10,-12); ctx.lineTo(20,5); ctx.stroke();
+
+  // engine
+  ctx.fillStyle = '#1e1e1e'; ctx.fillRect(-10,-4,20,14);
+  ctx.fillStyle = '#333';    ctx.fillRect(-8,-2,16,10);
+  ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
+  for (var f=0;f<4;f++){ctx.beginPath();ctx.moveTo(-8,-1+f*2.8);ctx.lineTo(8,-1+f*2.8);ctx.stroke();}
+
+  // tank + fairing
+  ctx.fillStyle = '#00aaff';
+  ctx.beginPath(); ctx.moveTo(-6,-12); ctx.lineTo(-1,-24); ctx.lineTo(9,-24); ctx.lineTo(14,-12); ctx.fill();
+  ctx.fillStyle = '#0066cc'; ctx.fillRect(1,-23,5,11);
+
+  // front fairing
+  ctx.fillStyle = '#0088dd';
+  ctx.beginPath(); ctx.moveTo(10,-12); ctx.lineTo(24,-5); ctx.lineTo(22,6); ctx.lineTo(12,1); ctx.fill();
+  ctx.fillStyle = '#ffe066';
+  ctx.beginPath(); ctx.ellipse(22,1,4,3,-0.3,0,Math.PI*2); ctx.fill();
+
+  // seat
+  ctx.fillStyle = '#0a0a0a';
+  ctx.beginPath(); ctx.moveTo(-9,-12); ctx.lineTo(-2,-16); ctx.lineTo(4,-16); ctx.lineTo(2,-12); ctx.fill();
+
+  // rider legs
+  ctx.fillStyle = '#111122';
+  ctx.beginPath(); ctx.moveTo(-2,-12); ctx.lineTo(-12,-5); ctx.lineTo(-9,3); ctx.lineTo(0,-7); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(4,-12); ctx.lineTo(12,-5); ctx.lineTo(9,3); ctx.lineTo(2,-7); ctx.fill();
+
+  // body
+  ctx.fillStyle = '#00aaff';
+  ctx.beginPath(); ctx.ellipse(5,-22,6,10,0.4,0,Math.PI*2); ctx.fill();
+
+  // arms
+  ctx.strokeStyle = '#0088cc'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(5,-24); ctx.quadraticCurveTo(16,-18,22,-8); ctx.stroke();
+
+  // helmet
+  ctx.fillStyle = '#0a0a0a';
+  ctx.beginPath(); ctx.arc(7,-32,9,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#00aaff';
+  ctx.beginPath(); ctx.arc(7,-32,9,Math.PI,0); ctx.fill();
+  ctx.fillStyle = '#88ccff'; ctx.globalAlpha=0.85;
+  ctx.beginPath(); ctx.ellipse(10,-30,5,3,0.3,0,Math.PI); ctx.fill();
+  ctx.globalAlpha=1;
+
+  ctx.restore();
+
+  // air rotation indicator
+  if (!bike.onGround) {
+    ctx.save();
+    ctx.font = 'bold 14px monospace';
+    ctx.fillStyle = '#ffdd44';
+    var deg = Math.round(bike.angle * 180 / Math.PI);
+    ctx.fillText(deg + '°', sx + 30, sy - 44);
+    ctx.restore();
+  }
 }
 
-function tangle(wx) {
-  return Math.atan2(ty(wx+5) - ty(wx-5), 10);
-}
-
-// bike state
-var bx, by, vx, angle, angvel;
-
-function resetBike() {
-  bx = 300;
-  by = ty(300) - 20;
-  vx = 1;
-  angle = 0;
-  angvel = 0;
-}
-
-var camx = 0;
-var gasOn = false;
-var brkOn = false;
-
-// gyro
-var gyroGamma = 0;
-var gyroActive = false;
+// ---- CONTROLS ----
+var gasOn = false, brkOn = false, jumpPressed = false;
+var gyroGamma = 0, gyroActive = false, gyroAsked = false;
 
 function enableGyro() {
+  if (gyroAsked) return; gyroAsked = true;
   if (typeof DeviceOrientationEvent !== 'undefined' &&
       typeof DeviceOrientationEvent.requestPermission === 'function') {
-    DeviceOrientationEvent.requestPermission().then(function(r) {
+    DeviceOrientationEvent.requestPermission().then(function(r){
       if (r === 'granted') {
         window.addEventListener('deviceorientation', onGyro);
         gyroActive = true;
-        document.getElementById('gyrotag').textContent = '🎮 gyro on';
+        document.getElementById('gyroEl').textContent = '🎮 gyro on';
       }
     }).catch(function(){});
   } else {
     window.addEventListener('deviceorientation', onGyro);
     gyroActive = true;
-    document.getElementById('gyrotag').textContent = '🎮 gyro on';
+    document.getElementById('gyroEl').textContent = '🎮 gyro on';
   }
 }
+function onGyro(e){ if(e.gamma!=null) gyroGamma=Math.max(-45,Math.min(45,e.gamma)); }
 
-function onGyro(e) {
-  if (e.gamma != null) gyroGamma = Math.max(-45, Math.min(45, e.gamma));
-}
-
-// buttons
 var gasEl = document.getElementById('gas');
 var brkEl = document.getElementById('brk');
+var rstEl = document.getElementById('rst');
 
-gasEl.addEventListener('touchstart', function(e){ e.preventDefault(); gasOn=true; enableGyro(); });
-gasEl.addEventListener('touchend',   function(e){ e.preventDefault(); gasOn=false; });
-gasEl.addEventListener('mousedown',  function(){ gasOn=true; });
-gasEl.addEventListener('mouseup',    function(){ gasOn=false; });
+gasEl.addEventListener('touchstart',function(e){e.preventDefault();gasOn=true;enableGyro();});
+gasEl.addEventListener('touchend',  function(e){e.preventDefault();gasOn=false;});
+gasEl.addEventListener('mousedown', function(){gasOn=true;});
+gasEl.addEventListener('mouseup',   function(){gasOn=false;});
+gasEl.addEventListener('mouseleave',function(){gasOn=false;});
 
-brkEl.addEventListener('touchstart', function(e){ e.preventDefault(); brkOn=true; });
-brkEl.addEventListener('touchend',   function(e){ e.preventDefault(); brkOn=false; });
-brkEl.addEventListener('mousedown',  function(){ brkOn=true; });
-brkEl.addEventListener('mouseup',    function(){ brkOn=false; });
+brkEl.addEventListener('touchstart',function(e){e.preventDefault();brkOn=true;});
+brkEl.addEventListener('touchend',  function(e){e.preventDefault();brkOn=false;});
+brkEl.addEventListener('mousedown', function(){brkOn=true;});
+brkEl.addEventListener('mouseup',   function(){brkOn=false;});
+brkEl.addEventListener('mouseleave',function(){brkOn=false;});
 
+rstEl.addEventListener('click',      function(){resetBike();});
+rstEl.addEventListener('touchstart', function(e){e.preventDefault();resetBike();});
+
+var jmpEl = document.getElementById('jmp');
+jmpEl.addEventListener('touchstart',function(e){e.preventDefault();jumpPressed=true;});
+jmpEl.addEventListener('mousedown', function(){jumpPressed=true;});
 c.addEventListener('click', enableGyro);
 
-// physics
-function update(dt) {
-  if (dt > 0.05) dt = 0.05;
+// keyboard fallback
+window.addEventListener('keydown', function(e){
+  if (e.key==='ArrowRight'||e.key==='x') gasOn=true;
+  if (e.key==='ArrowLeft' ||e.key==='z') brkOn=true;
+  if (e.key===' ') jumpPressed=true;
+  if (e.key==='r') resetBike();
+});
+window.addEventListener('keyup', function(e){
+  if (e.key==='ArrowRight'||e.key==='x') gasOn=false;
+  if (e.key==='ArrowLeft' ||e.key==='z') brkOn=false;
+});
 
-  var acc = 0;
-  if (gasOn) acc =  1.4;
-  if (brkOn) acc = -1.2;
-
-  var sl = tangle(bx);
-  acc -= Math.sin(sl) * 0.5;
-
-  vx += acc * dt;
-  vx *= Math.pow(0.99, dt * 60);
-  if (vx >  80) vx =  80;
-  if (vx < -20) vx = -20;
-
-  bx += vx * dt * 90;
-  if (bx < 50)        { bx = 50;        if (vx < 0) vx = 0; }
-  if (bx > TLEN - 50) { bx = TLEN - 50; if (vx > 0) vx = 0; }
-
-  var rg = ty(bx - 14);
-  var fg = ty(bx + 14);
-  var ty_ = (rg + fg) / 2 - 12;
-  by += (ty_ - by) * 0.2;
-
-  var ta = Math.atan2(fg - rg, 28);
-
-  if (gyroActive) {
-    var lean = gyroGamma / 45;
-    angvel += lean * 2.5 * (Math.abs(vx) * 0.08 + 0.4) * dt * 5;
-  }
-
-  angvel *= 0.92;
-  angvel += (ta - angle) * 3 * dt;
-  angle  += angvel * dt * 3;
-  if (angle >  0.9) angle =  0.9;
-  if (angle < -0.9) angle = -0.9;
-
-  var tc = bx - W/2 + 50;
-  if (tc < 0) tc = 0;
-  if (tc > TLEN - W) tc = TLEN - W;
-  camx += (tc - camx) * 0.08;
-
-  document.getElementById('dist').textContent = Math.floor(bx / 5);
-  document.getElementById('spd').textContent  = Math.floor(Math.abs(vx) * 2.5);
-}
-
-function drawTerrain() {
-  var si = Math.max(0, Math.floor(camx / SEG) - 1);
-  var ei = Math.min(pts.length - 1, si + Math.ceil(W / SEG) + 3);
-
-  // dirt fill
-  ctx.fillStyle = '#6b4226';
-  ctx.beginPath();
-  ctx.moveTo(pts[si].x - camx, pts[si].y);
-  for (var i = si+1; i <= ei; i++) {
-    ctx.lineTo(pts[i].x - camx, pts[i].y);
-  }
-  ctx.lineTo(pts[ei].x - camx, H);
-  ctx.lineTo(pts[si].x - camx, H);
-  ctx.fill();
-
-  // grass top
-  ctx.strokeStyle = '#4a8c2a';
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.moveTo(pts[si].x - camx, pts[si].y);
-  for (var i = si+1; i <= ei; i++) {
-    ctx.lineTo(pts[i].x - camx, pts[i].y);
-  }
-  ctx.stroke();
-}
-
-function drawBike() {
-  var sx = bx - camx;
-  var sy = by;
-  ctx.save();
-  ctx.translate(sx, sy);
-  ctx.rotate(angle);
-
-  // exhaust pipe
-  ctx.strokeStyle = '#aaa';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(-8, 4);
-  ctx.lineTo(-22, 6);
-  ctx.lineTo(-26, 12);
-  ctx.stroke();
-
-  // exhaust smoke when gassing
-  if (gasOn) {
-    ctx.globalAlpha = 0.35;
-    ctx.fillStyle = '#ccc';
-    ctx.beginPath(); ctx.arc(-30, 13, 4, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(-36, 11, 5, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-
-  // swingarm
-  ctx.strokeStyle = '#555';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(-4, 6);
-  ctx.lineTo(-18, 8);
-  ctx.stroke();
-
-  // front fork
-  ctx.strokeStyle = '#888';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(8, -8);
-  ctx.lineTo(18, 8);
-  ctx.stroke();
-
-  // rear wheel
-  ctx.strokeStyle = '#444';
-  ctx.lineWidth = 5;
-  ctx.beginPath(); ctx.arc(-18, 8, 14, 0, Math.PI*2); ctx.stroke();
-  ctx.fillStyle = '#1a1a1a';
-  ctx.beginPath(); ctx.arc(-18, 8, 14, 0, Math.PI*2); ctx.fill();
-  // tread marks
-  ctx.strokeStyle = '#555';
-  ctx.lineWidth = 2;
-  for (var t = 0; t < 6; t++) {
-    var ta = (t / 6) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.arc(-18, 8, 14, ta, ta + 0.3);
-    ctx.stroke();
-  }
-  // hub
-  ctx.fillStyle = '#bbb';
-  ctx.beginPath(); ctx.arc(-18, 8, 5, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#666';
-  ctx.beginPath(); ctx.arc(-18, 8, 2, 0, Math.PI*2); ctx.fill();
-
-  // front wheel
-  ctx.strokeStyle = '#444';
-  ctx.lineWidth = 5;
-  ctx.beginPath(); ctx.arc(18, 8, 13, 0, Math.PI*2); ctx.stroke();
-  ctx.fillStyle = '#1a1a1a';
-  ctx.beginPath(); ctx.arc(18, 8, 13, 0, Math.PI*2); ctx.fill();
-  for (var t = 0; t < 6; t++) {
-    var ta = (t / 6) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.strokeStyle = '#555';
-    ctx.lineWidth = 2;
-    ctx.arc(18, 8, 13, ta, ta + 0.3);
-    ctx.stroke();
-  }
-  ctx.fillStyle = '#bbb';
-  ctx.beginPath(); ctx.arc(18, 8, 4, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#666';
-  ctx.beginPath(); ctx.arc(18, 8, 2, 0, Math.PI*2); ctx.fill();
-
-  // main frame tube
-  ctx.strokeStyle = '#333';
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.moveTo(-18, 6);
-  ctx.lineTo(-4, -10);
-  ctx.lineTo(10, -10);
-  ctx.lineTo(18, 4);
-  ctx.stroke();
-
-  // engine block
-  ctx.fillStyle = '#222';
-  ctx.fillRect(-10, -4, 18, 12);
-  ctx.fillStyle = '#444';
-  ctx.fillRect(-8, -2, 14, 8);
-  // fins
-  ctx.strokeStyle = '#555';
-  ctx.lineWidth = 1;
-  for (var f = 0; f < 4; f++) {
-    ctx.beginPath();
-    ctx.moveTo(-8, -1 + f*2.5);
-    ctx.lineTo(6,  -1 + f*2.5);
-    ctx.stroke();
-  }
-
-  // tank & fairing
-  ctx.fillStyle = '#e8251a';
-  ctx.beginPath();
-  ctx.moveTo(-6, -10);
-  ctx.lineTo(-2, -22);
-  ctx.lineTo(8, -22);
-  ctx.lineTo(12, -10);
-  ctx.fill();
-  // tank highlight stripe
-  ctx.fillStyle = '#ff5533';
-  ctx.fillRect(0, -21, 4, 10);
-
-  // seat
-  ctx.fillStyle = '#111';
-  ctx.beginPath();
-  ctx.moveTo(-8, -10);
-  ctx.lineTo(-2, -14);
-  ctx.lineTo(4, -14);
-  ctx.lineTo(2, -10);
-  ctx.fill();
-
-  // front fairing / headlight
-  ctx.fillStyle = '#cc1a10';
-  ctx.beginPath();
-  ctx.moveTo(10, -10);
-  ctx.lineTo(22, -4);
-  ctx.lineTo(20, 4);
-  ctx.lineTo(12, 0);
-  ctx.fill();
-  // headlight
-  ctx.fillStyle = '#ffe066';
-  ctx.beginPath();
-  ctx.ellipse(20, 0, 4, 3, -0.3, 0, Math.PI*2);
-  ctx.fill();
-
-  // rider — crouched aggressive tuck
-  // legs
-  ctx.fillStyle = '#1a1a2e';
-  ctx.beginPath();
-  ctx.moveTo(-2, -10);
-  ctx.lineTo(-10, -4);
-  ctx.lineTo(-8, 2);
-  ctx.lineTo(0, -6);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(4, -10);
-  ctx.lineTo(10, -4);
-  ctx.lineTo(8, 2);
-  ctx.lineTo(2, -6);
-  ctx.fill();
-
-  // body leaned forward
-  ctx.fillStyle = '#ff3311';
-  ctx.beginPath();
-  ctx.ellipse(4, -20, 6, 10, 0.4, 0, Math.PI*2);
-  ctx.fill();
-
-  // arms reaching forward to bars
-  ctx.strokeStyle = '#ff3311';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(4, -22);
-  ctx.quadraticCurveTo(14, -18, 20, -8);
-  ctx.stroke();
-
-  // helmet — full face aggressive
-  ctx.fillStyle = '#111';
-  ctx.beginPath();
-  ctx.arc(6, -30, 8, 0, Math.PI*2);
-  ctx.fill();
-  ctx.fillStyle = '#e8251a';
-  ctx.beginPath();
-  ctx.arc(6, -30, 8, Math.PI, 0);
-  ctx.fill();
-  // visor
-  ctx.fillStyle = '#88ccff';
-  ctx.globalAlpha = 0.8;
-  ctx.beginPath();
-  ctx.ellipse(9, -28, 5, 3, 0.3, 0, Math.PI);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-
-  ctx.restore();
-
-  // gyro lean indicator
-  if (gyroActive && Math.abs(gyroGamma) > 5) {
-    ctx.save();
-    ctx.font = 'bold 22px monospace';
-    ctx.fillStyle = '#fff';
-    ctx.globalAlpha = 0.8;
-    ctx.fillText(gyroGamma > 0 ? '▶' : '◀', sx + (gyroGamma > 0 ? 38 : -52), sy - 38);
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-}
-
-function drawBg() {
-  // sky
-  ctx.fillStyle = '#4a9fd4';
-  ctx.fillRect(0, 0, W, H);
-
-  // simple clouds
-  ctx.fillStyle = '#ffffff';
-  var offsets = [0, 250, 500];
-  for (var i = 0; i < offsets.length; i++) {
-    var cx = ((camx * 0.15 + offsets[i] * 1.3) % (W + 200)) - 100;
-    ctx.beginPath();
-    ctx.arc(cx,      55, 28, 0, Math.PI*2);
-    ctx.arc(cx + 35, 48, 24, 0, Math.PI*2);
-    ctx.arc(cx - 28, 50, 22, 0, Math.PI*2);
-    ctx.fill();
-  }
-}
-
+// ---- LOOP ----
 var last = 0;
 function loop(ts) {
   var dt = (ts - last) / 1000;
   last = ts;
-  if (dt > 0 && dt < 0.2) update(dt);
+  if (dt > 0 && dt < 0.1) update(dt);
   ctx.clearRect(0, 0, W, H);
   drawBg();
-  drawTerrain();
+  drawPlatforms();
   drawBike();
   requestAnimationFrame(loop);
 }
 
-makeTerrain();
+buildMap();
 resetBike();
-requestAnimationFrame(function(ts){ last = ts; loop(ts); });
+requestAnimationFrame(function(ts){ last=ts; loop(ts); });
 </script>
 </body>
 </html>
