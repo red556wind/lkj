@@ -1,0 +1,639 @@
+Here is an HTML document that creates a motorcycle physics game where you control the bike's tilt using your phone's gyroscope, with on-screen buttons for gas and brakes.
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Gyro Moto - Hill Climb Racer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: #0a2f1f;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', 'Poppins', system-ui, -apple-system, 'Roboto', sans-serif;
+            touch-action: manipulation;
+        }
+
+        .game-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            background: #1e3a2e;
+            border-radius: 28px;
+            box-shadow: 0 20px 35px rgba(0,0,0,0.4);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            background: linear-gradient(145deg, #87CEEB 0%, #b0e0ff 100%);
+            cursor: pointer;
+            touch-action: none;
+        }
+
+        .controls {
+            background: #1f2e1c;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            border-top: 3px solid #ffa500;
+        }
+
+        .gyro-panel {
+            background: #2c3e2b;
+            border-radius: 60px;
+            padding: 6px 16px;
+            color: #ffd966;
+            font-weight: bold;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(2px);
+        }
+
+        .gyro-icon {
+            font-size: 1.3rem;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 20px;
+        }
+
+        .ctrl-btn {
+            background: #2e2c2a;
+            border: none;
+            font-size: 1.9rem;
+            font-weight: bold;
+            width: 80px;
+            padding: 12px 0;
+            border-radius: 60px;
+            color: white;
+            text-shadow: 0 2px 0 #00000055;
+            box-shadow: 0 6px 0 #121212;
+            transition: 0.05s linear;
+            text-align: center;
+            cursor: pointer;
+            touch-action: manipulation;
+            font-family: monospace;
+            letter-spacing: 2px;
+        }
+
+        .ctrl-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #121212;
+        }
+
+        .gas-btn {
+            background: #c95a0f;
+            box-shadow: 0 6px 0 #733d06;
+        }
+
+        .brake-btn {
+            background: #3a6ea5;
+            box-shadow: 0 6px 0 #1e3a5f;
+        }
+
+        .info {
+            display: flex;
+            justify-content: space-between;
+            background: #000000aa;
+            backdrop-filter: blur(5px);
+            color: white;
+            padding: 8px 16px;
+            font-weight: bold;
+            font-size: 1rem;
+            border-bottom: 1px solid #ffaa33;
+        }
+
+        .score-board {
+            background: #1f2a0e;
+            border-radius: 40px;
+            padding: 4px 12px;
+        }
+
+        @media (max-width: 550px) {
+            .ctrl-btn {
+                width: 70px;
+                font-size: 1.6rem;
+            }
+            .gyro-panel {
+                font-size: 0.7rem;
+            }
+        }
+
+        .gyro-warning {
+            background: #d9534f;
+            color: white;
+            font-size: 0.75rem;
+            text-align: center;
+            padding: 5px;
+            display: none;
+        }
+
+        .orientation-note {
+            background: #f0ad4e;
+            color: #1e2a0a;
+            font-size: 0.7rem;
+            text-align: center;
+            padding: 4px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <div class="info">
+        <span>🏍️ GYRO MOTO</span>
+        <span class="score-board">📏 DIST: <span id="distanceMeter">0</span> m</span>
+    </div>
+    <canvas id="gameCanvas" width="500" height="400" style="width:100%; height:auto; max-width:500px; aspect-ratio:500/400"></canvas>
+    <div class="controls">
+        <div class="gyro-panel">
+            <span class="gyro-icon">📳</span>
+            <span id="gyroStatus">Tilt to steer</span>
+        </div>
+        <div class="action-buttons">
+            <button class="ctrl-btn gas-btn" id="gasButton">⛽ GAS</button>
+            <button class="ctrl-btn brake-btn" id="brakeButton">🛑 BRAKE</button>
+        </div>
+    </div>
+    <div id="gyroWarning" class="gyro-warning"></div>
+    <div class="orientation-note">📱 Hold phone flat / tilt left-right → bike leans & steers | Gas + Brake buttons</div>
+</div>
+
+<script>
+    (function(){
+        // ---------- CANVAS ----------
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // world & bike constants
+        const GROUND_Y_OFFSET = 72;    // ground base y from canvas bottom
+        const CANVAS_W = 500;
+        const CANVAS_H = 400;
+        canvas.width = CANVAS_W;
+        canvas.height = CANVAS_H;
+        
+        // terrain generation (hill climb style random smooth hills)
+        let terrainPoints = [];
+        const TERRAIN_STEP = 12;        // pixel step between points
+        const TERRAIN_WIDTH = 3000;     // total world width (pixels)
+        const NUM_POINTS = Math.floor(TERRAIN_WIDTH / TERRAIN_STEP) + 5;
+        
+        // camera & bike position
+        let cameraX = 0;
+        let bikeX = 150;            // world X (pixel)
+        let bikeY = 0;              // will be set by ground collision
+        let bikeVelX = 0;
+        let bikeVelY = 0;
+        let bikeAngle = 0;          // rotation in radians (visual lean + tilt)
+        let angularVel = 0;
+        const GRAVITY = 0.45;
+        const GROUND_FRICTION_AIR = 0.98;
+        const GROUND_FRICTION_TIRE = 0.96;
+        
+        // gyroscope steering (tilt control = lean influence)
+        let gyroGamma = 0;          // -90..90 left/right tilt (gamma)
+        let targetLean = 0;         // -1..1 factor for steering torque
+        let currentSteerForce = 0;
+        
+        // buttons
+        let gasPressed = false;
+        let brakePressed = false;
+        let engineForce = 0.42;
+        let brakeForce = 0.68;
+        
+        // scoring / distance
+        let distance = 0;
+        let maxDistance = 0;
+        
+        // game state
+        let lastTimestamp = 0;
+        let gameRunning = true;
+        
+        // wheel collision / ground following
+        let wheelBase = 24;   // distance between front/rear wheel (visual & physics)
+        let rearWheelX = 0, frontWheelX = 0;
+        
+        // gyro permissions & handling
+        let gyroAvailable = false;
+        let gyroInitAttempt = false;
+        
+        // ---------- HELPER FUNCTIONS: TERRAIN ----------
+        function generateTerrain() {
+            let points = [];
+            let baseY = CANVAS_H - GROUND_Y_OFFSET;
+            let amplitude = 32;
+            let freq = 0.012;
+            let freq2 = 0.027;
+            for (let i = 0; i < NUM_POINTS; i++) {
+                let worldX = i * TERRAIN_STEP;
+                // sin + cos for rolling hills & steep sections (hill climb style)
+                let yOffset = Math.sin(worldX * freq) * amplitude 
+                            + Math.cos(worldX * freq2) * 18
+                            + Math.sin(worldX * 0.005) * 12;
+                // add a couple of "climbs"
+                if (worldX > 800 && worldX < 1400) yOffset += Math.sin((worldX-800)*0.025) * 14;
+                if (worldX > 1900) yOffset += Math.cos(worldX * 0.008) * 15;
+                let y = baseY - yOffset;
+                // clamp min / max
+                y = Math.min(CANVAS_H - 55, Math.max(CANVAS_H - 130, y));
+                points.push({ x: worldX, y: y });
+            }
+            return points;
+        }
+        
+        // get ground Y at any world X (linear interpolation)
+        function getGroundY(worldX) {
+            if (worldX < 0) return terrainPoints[0].y;
+            if (worldX > TERRAIN_WIDTH) return terrainPoints[terrainPoints.length-1].y;
+            let idx = Math.floor(worldX / TERRAIN_STEP);
+            idx = Math.min(idx, terrainPoints.length-2);
+            let t = (worldX - terrainPoints[idx].x) / TERRAIN_STEP;
+            let y1 = terrainPoints[idx].y;
+            let y2 = terrainPoints[idx+1].y;
+            return y1 + (y2 - y1) * t;
+        }
+        
+        // get ground slope angle at point
+        function getGroundSlope(worldX) {
+            let h1 = getGroundY(worldX - 4);
+            let h2 = getGroundY(worldX + 4);
+            let dx = 8;
+            let dy = h2 - h1;
+            return Math.atan2(dy, dx);
+        }
+        
+        // collision & physics: place bike on ground, compute wheel contact points
+        function updatePhysics(dt) {
+            if (!gameRunning) return;
+            let dtClamped = Math.min(dt, 0.033);
+            
+            // --- gas / brake ---
+            let acc = 0;
+            if (gasPressed) acc = engineForce;
+            if (brakePressed) acc = -brakeForce;
+            
+            // apply acceleration based on bike angle relative to slope
+            let slopeAngle = getGroundSlope(bikeX);
+            let slopeFactor = Math.cos(slopeAngle);
+            // gravity component along slope
+            let gravityAlong = Math.sin(slopeAngle) * GRAVITY * 0.5;
+            bikeVelX += acc * dtClamped * 1.2;
+            bikeVelX -= gravityAlong * dtClamped;
+            
+            // friction
+            let friction = GROUND_FRICTION_AIR;
+            if (Math.abs(bikeVelX) > 0.2) friction = GROUND_FRICTION_TIRE;
+            bikeVelX *= (1 - friction * dtClamped * 2.5);
+            
+            // limit max speed
+            let maxSpeed = 38;
+            bikeVelX = Math.min(maxSpeed, Math.max(-12, bikeVelX));
+            
+            // update position
+            let newBikeX = bikeX + bikeVelX * dtClamped * 2.2;
+            // world boundaries
+            if (newBikeX < 40) { newBikeX = 40; bikeVelX = 0; }
+            if (newBikeX > TERRAIN_WIDTH - 40) { newBikeX = TERRAIN_WIDTH - 40; bikeVelX = 0; }
+            bikeX = newBikeX;
+            
+            // ---- gyro steering: tilt affects angular velocity on bike (lean torque) ----
+            if (gyroAvailable) {
+                // gamma range -50..50 map to lean factor -1..1 (sensitivity)
+                let rawLean = Math.min(0.8, Math.max(-0.8, gyroGamma / 55));
+                targetLean = rawLean;
+            } else {
+                // fallback: tilt using mouse/touch drag simulation? but we keep zero, but we can optionally use mouse x? 
+                // simplest just no gyro -> neutral.
+                targetLean = 0;
+            }
+            // steering torque: lean influence on bike angular velocity + speed effect
+            let steeringTorque = targetLean * 2.8 * (Math.abs(bikeVelX) * 0.12 + 0.5);
+            angularVel += steeringTorque * dtClamped * 4;
+            angularVel *= 0.94;
+            bikeAngle += angularVel * dtClamped * 3.5;
+            // limit bike angle (prevent unrealistic flip)
+            bikeAngle = Math.min(0.75, Math.max(-0.75, bikeAngle));
+            
+            // --- ground collision for wheels (suspension) ---
+            let rearX = bikeX - 12;
+            let frontX = bikeX + 12;
+            let rearGround = getGroundY(rearX);
+            let frontGround = getGroundY(frontX);
+            let bikeCenterGround = getGroundY(bikeX);
+            // average wheel height for body Y
+            let targetBodyY = (rearGround + frontGround) / 2 - 14; // offset for bike sprite
+            bikeY = bikeY + (targetBodyY - bikeY) * 0.3;
+            // prevent bike sinking
+            if (bikeY > targetBodyY + 3) bikeY = targetBodyY + 3;
+            if (bikeY < targetBodyY - 8) bikeY = targetBodyY - 8;
+            
+            // small extra if falling
+            let minY = Math.min(rearGround, frontGround) - 16;
+            if (bikeY > minY + 4) bikeY = minY + 4;
+            
+            // distance tracking (forward progress)
+            let distMeters = Math.floor(bikeX / 8);
+            if (distMeters > maxDistance) maxDistance = distMeters;
+            distance = distMeters;
+            document.getElementById('distanceMeter').innerText = distance;
+            
+            // camera follow
+            let targetCam = bikeX - CANVAS_W/2 + 40;
+            targetCam = Math.min(TERRAIN_WIDTH - CANVAS_W + 20, Math.max(0, targetCam));
+            cameraX = cameraX * 0.92 + targetCam * 0.08;
+            if (Math.abs(cameraX - targetCam) < 1) cameraX = targetCam;
+        }
+        
+        // ---------- RENDERING (hill climb style) ----------
+        function drawTerrain() {
+            let startX = Math.max(0, Math.floor(cameraX));
+            let endX = Math.min(TERRAIN_WIDTH, cameraX + CANVAS_W + 50);
+            let idxStart = Math.max(0, Math.floor(startX / TERRAIN_STEP));
+            let idxEnd = Math.min(terrainPoints.length-1, Math.ceil(endX / TERRAIN_STEP) + 1);
+            
+            ctx.beginPath();
+            let firstPoint = terrainPoints[idxStart];
+            let screenFirstX = firstPoint.x - cameraX;
+            ctx.moveTo(screenFirstX, firstPoint.y);
+            for (let i = idxStart+1; i <= idxEnd; i++) {
+                let p = terrainPoints[i];
+                let sx = p.x - cameraX;
+                ctx.lineTo(sx, p.y);
+            }
+            ctx.lineTo(cameraX + CANVAS_W, CANVAS_H);
+            ctx.lineTo(cameraX, CANVAS_H);
+            ctx.fillStyle = '#6f4f1c';
+            ctx.fill();
+            ctx.fillStyle = '#8b6946';
+            ctx.fillRect(0, CANVAS_H-12, CANVAS_W, 12);
+            // grass edge
+            ctx.beginPath();
+            for (let i = idxStart; i <= idxEnd; i++) {
+                let p = terrainPoints[i];
+                let sx = p.x - cameraX;
+                ctx.moveTo(sx, p.y);
+                ctx.lineTo(sx, p.y-8);
+                ctx.fillStyle = '#568c3a';
+                ctx.fillRect(sx-2, p.y-8, 4, 8);
+            }
+            // draw dirt details
+            ctx.fillStyle = '#c99e6f';
+            for(let i=0;i<60;i++) {
+                let randX = startX + Math.random() * (endX-startX);
+                let gy = getGroundY(randX);
+                if(randX > cameraX && randX < cameraX+CANVAS_W) {
+                    ctx.fillRect(randX-cameraX, gy-3, 2, 3);
+                }
+            }
+        }
+        
+        function drawBike() {
+            let screenX = bikeX - cameraX;
+            let screenY = bikeY;
+            ctx.save();
+            ctx.translate(screenX, screenY);
+            ctx.rotate(bikeAngle);
+            // wheels
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#222';
+            ctx.beginPath();
+            ctx.ellipse(-12, 5, 9, 12, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#444';
+            ctx.beginPath();
+            ctx.ellipse(12, 5, 9, 12, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#777';
+            ctx.beginPath();
+            ctx.arc(-12, 5, 5, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(12, 5, 5, 0, Math.PI*2);
+            ctx.fill();
+            // frame
+            ctx.beginPath();
+            ctx.moveTo(-10, 0);
+            ctx.lineTo(0, -12);
+            ctx.lineTo(12, 0);
+            ctx.lineTo(6, 8);
+            ctx.lineTo(-6, 8);
+            ctx.fillStyle = '#e35209';
+            ctx.fill();
+            ctx.fillStyle = '#c93c00';
+            ctx.fillRect(-4, -14, 8, 10);
+            // rider
+            ctx.fillStyle = '#3c6e47';
+            ctx.beginPath();
+            ctx.ellipse(0, -16, 7, 10, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#fdd7a8';
+            ctx.beginPath();
+            ctx.arc(0, -21, 5, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-2, -23, 2, 3);
+            ctx.fillRect(1, -23, 2, 3);
+            // helmet
+            ctx.fillStyle = '#d64933';
+            ctx.beginPath();
+            ctx.ellipse(0, -24, 7, 6, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+            
+            // gyro steer indicator
+            if(gyroAvailable) {
+                ctx.font = "bold 14px monospace";
+                ctx.fillStyle = "#FFFFFFcc";
+                ctx.shadowBlur = 0;
+                let leanDir = targetLean > 0 ? "↷" : (targetLean<0 ? "↶" : "⚡");
+                ctx.fillText(`${leanDir} ${Math.abs(targetLean).toFixed(1)}`, bikeX-cameraX-12, bikeY-28);
+            } else {
+                ctx.fillStyle = "#ffcc55";
+                ctx.font = "10px monospace";
+                ctx.fillText("NO GYRO", bikeX-cameraX-15, bikeY-28);
+            }
+        }
+        
+        function drawBackground() {
+            let grad = ctx.createLinearGradient(0,0,0,CANVAS_H);
+            grad.addColorStop(0,"#b2e0fa");
+            grad.addColorStop(0.7,"#dbecb0");
+            ctx.fillStyle = grad;
+            ctx.fillRect(0,0,CANVAS_W, CANVAS_H);
+            // clouds
+            ctx.fillStyle = "#f9f9fc";
+            for(let i=0;i<3;i++) {
+                let cloudX = (cameraX*0.2 + i*187) % (CANVAS_W+200) -100;
+                ctx.beginPath();
+                ctx.ellipse(cloudX, 45, 30, 25, 0, 0, Math.PI*2);
+                ctx.ellipse(cloudX+25, 35, 28, 22, 0, 0, Math.PI*2);
+                ctx.ellipse(cloudX-18, 38, 27, 22, 0, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+        
+        function drawUIEffects() {
+            if(gasPressed) {
+                ctx.fillStyle = "#ffaa3355";
+                ctx.fillRect(0,0,CANVAS_W, CANVAS_H);
+            }
+            if(brakePressed) {
+                ctx.fillStyle = "#aa444455";
+                ctx.fillRect(0,0,CANVAS_W, CANVAS_H);
+            }
+            ctx.font = "bold 22monospace";
+            ctx.fillStyle = "#FFD966";
+            ctx.shadowBlur = 4;
+            ctx.fillText("🏁 HILL CLIMB", 12, 42);
+            ctx.font = "12px monospace";
+            ctx.fillStyle = "#eeeeee";
+            ctx.fillText(`SPEED: ${Math.abs(bikeVelX).toFixed(0)} km/h`, CANVAS_W-100, 32);
+        }
+        
+        function render() {
+            if (!ctx) return;
+            drawBackground();
+            drawTerrain();
+            drawBike();
+            drawUIEffects();
+            // dust trail if speed > 5
+            if(Math.abs(bikeVelX) > 5 && Math.random()<0.3){
+                ctx.fillStyle = "#aa8866aa";
+                ctx.beginPath();
+                ctx.arc(bikeX-cameraX-18+Math.random()*12, bikeY+5, 3,0,Math.PI*2);
+                ctx.fill();
+            }
+        }
+        
+        // ---------- GYROSCOPE INIT ----------
+        function initGyro() {
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                // iOS requires user gesture
+                document.body.addEventListener('touchstart', requestGyroPermission);
+                document.body.addEventListener('click', requestGyroPermission);
+                document.getElementById('gyroStatus').innerText = "Tap screen → allow gyro";
+            } else {
+                // Android / others: add listener directly
+                window.addEventListener('deviceorientation', handleOrientation);
+                gyroAvailable = true;
+                document.getElementById('gyroStatus').innerText = "🎯 Gyro Active (Tilt)";
+                document.getElementById('gyroWarning').style.display = 'none';
+            }
+        }
+        
+        function requestGyroPermission(e) {
+            if (gyroInitAttempt) return;
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation);
+                            gyroAvailable = true;
+                            document.getElementById('gyroStatus').innerText = "📳 Gyro Steering ON";
+                            document.getElementById('gyroWarning').style.display = 'none';
+                        } else {
+                            document.getElementById('gyroStatus').innerText = "Gyro blocked";
+                            gyroAvailable = false;
+                        }
+                    })
+                    .catch(err => {
+                        console.warn(err);
+                        document.getElementById('gyroStatus').innerText = "Gyro error";
+                    });
+                gyroInitAttempt = true;
+            } else {
+                window.addEventListener('deviceorientation', handleOrientation);
+                gyroAvailable = true;
+                document.getElementById('gyroStatus').innerText = "🎮 Tilt Active";
+                gyroInitAttempt = true;
+            }
+            // remove listener after prompt
+            document.body.removeEventListener('touchstart', requestGyroPermission);
+            document.body.removeEventListener('click', requestGyroPermission);
+        }
+        
+        function handleOrientation(event) {
+            if (event.gamma !== null) {
+                // gamma: left-right tilt in degrees
+                let raw = event.gamma;
+                raw = Math.min(45, Math.max(-45, raw));
+                gyroGamma = raw;
+            }
+        }
+        
+        // ---------- BUTTON HANDLERS ----------
+        const gasBtn = document.getElementById('gasButton');
+        const brakeBtn = document.getElementById('brakeButton');
+        
+        function setGas(state) { gasPressed = state; }
+        function setBrake(state) { brakePressed = state; }
+        
+        gasBtn.addEventListener('mousedown', (e) => { e.preventDefault(); setGas(true); });
+        gasBtn.addEventListener('mouseup', () => setGas(false));
+        gasBtn.addEventListener('mouseleave', () => setGas(false));
+        gasBtn.addEventListener('touchstart', (e) => { e.preventDefault(); setGas(true); });
+        gasBtn.addEventListener('touchend', (e) => { e.preventDefault(); setGas(false); });
+        
+        brakeBtn.addEventListener('mousedown', (e) => { e.preventDefault(); setBrake(true); });
+        brakeBtn.addEventListener('mouseup', () => setBrake(false));
+        brakeBtn.addEventListener('mouseleave', () => setBrake(false));
+        brakeBtn.addEventListener('touchstart', (e) => { e.preventDefault(); setBrake(true); });
+        brakeBtn.addEventListener('touchend', (e) => { e.preventDefault(); setBrake(false); });
+        
+        // disable context menu on canvas
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        
+        // ---------- ANIMATION LOOP ----------
+        let lastTime = performance.now();
+        function gameLoop(now) {
+            let dt = Math.min(0.033, (now - lastTime) / 1000);
+            if (dt > 0.005) {
+                updatePhysics(dt);
+                render();
+            }
+            lastTime = now;
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // generate terrain and init
+        terrainPoints = generateTerrain();
+        bikeX = 180;
+        bikeY = getGroundY(bikeX) - 15;
+        bikeVelX = 3;
+        initGyro();
+        lastTime = performance.now();
+        requestAnimationFrame(gameLoop);
+        
+        // reset gyro warning fallback
+        window.addEventListener('load', () => {
+            if (!gyroAvailable && !gyroInitAttempt) {
+                setTimeout(() => {
+                    if(!gyroAvailable) document.getElementById('gyroStatus').innerHTML = "⚡ No gyro? Tap canvas and tilt";
+                }, 1000);
+            }
+        });
+    })();
+</script>
+</body>
+</html>
+```
