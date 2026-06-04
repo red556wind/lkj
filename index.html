@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>HILL CLIMB · GYRO BIKE</title>
+    <title>GYRO MOTO · HILL CLIMB SIMPLE</title>
     <style>
         * {
             margin: 0;
@@ -13,24 +13,24 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* FULLSCREEN HARDCORE */
+        /* FULLSCREEN — no scroll, no zoom */
         html, body {
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background: #0a0f0a;
-            touch-action: none;  /* kill scroll/pinch */
+            background: #0a1f0a;
+            touch-action: none;
         }
 
         body {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-family: system-ui, 'Segoe UI', 'Poppins', -apple-system, monospace;
+            font-family: system-ui, 'Segoe UI', 'Poppins', monospace;
         }
 
-        /* GAME WRAPPER — fills whole screen */
-        .game-full {
+        /* GAME WRAPPER absolute full */
+        .game-screen {
             position: fixed;
             top: 0;
             left: 0;
@@ -50,246 +50,223 @@
             touch-action: none;
         }
 
-        /* MINIMAL OVERLAY: only speed + distance + fuel (tiny) */
-        .stats-simple {
+        /* SIMPLE OVERLAY: only distance & speed */
+        .stats-mini {
             position: absolute;
-            top: 12px;
-            left: 12px;
-            right: 12px;
+            top: 16px;
+            left: 16px;
+            right: 16px;
             display: flex;
             justify-content: space-between;
             pointer-events: none;
-            z-index: 10;
+            z-index: 20;
             font-weight: 800;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.4);
-            font-size: 1.2rem;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            font-size: 1.3rem;
             letter-spacing: 0.5px;
         }
 
-        .stat-card {
+        .stat-bubble {
             background: rgba(0,0,0,0.55);
             backdrop-filter: blur(8px);
-            padding: 6px 16px;
+            padding: 6px 18px;
             border-radius: 60px;
             color: #FFE484;
             font-family: monospace;
             font-weight: bold;
         }
 
-        /* BUTTONS — big, simple, edge-to-edge thumbs */
-        .button-bar {
+        /* BIG BUTTONS — GAS & BRAKE (touch friendly) */
+        .control-panel {
             position: absolute;
-            bottom: 22px;
-            left: 16px;
-            right: 16px;
+            bottom: 28px;
+            left: 20px;
+            right: 20px;
             display: flex;
-            gap: 20px;
+            gap: 24px;
             justify-content: center;
             pointer-events: none;
-            z-index: 20;
+            z-index: 30;
         }
 
-        .action-btn {
+        .ctrl-big {
             pointer-events: auto;
             flex: 1;
-            max-width: 160px;
-            background: rgba(0,0,0,0.75);
+            max-width: 170px;
+            background: rgba(0,0,0,0.8);
             backdrop-filter: blur(18px);
-            border: 2px solid rgba(255,200,100,0.8);
+            border: 2px solid rgba(255,200,100,0.9);
             border-radius: 80px;
-            padding: 18px 0;
+            padding: 20px 0;
             font-size: 2rem;
             font-weight: bold;
             text-align: center;
             color: white;
             font-family: monospace;
-            letter-spacing: 2px;
-            transition: 0.04s linear;
+            letter-spacing: 3px;
+            transition: 0.02s linear;
             touch-action: manipulation;
             cursor: pointer;
-            box-shadow: 0 6px 0 rgba(0,0,0,0.4);
+            box-shadow: 0 7px 0 rgba(0,0,0,0.45);
         }
 
-        .action-btn:active {
+        .ctrl-big:active {
             transform: translateY(4px);
-            box-shadow: 0 2px 0 rgba(0,0,0,0.5);
+            box-shadow: 0 2px 0 rgba(0,0,0,0.6);
         }
 
-        .gas {
-            background: rgba(230, 126, 34, 0.9);
-            border-color: #ffcc77;
-            text-shadow: 0 1px 2px black;
+        .gas-btn {
+            background: rgba(230, 126, 34, 0.95);
+            border-color: #ffdd99;
         }
 
-        .brake {
-            background: rgba(52, 152, 219, 0.9);
-            border-color: #aaddff;
+        .brake-btn {
+            background: rgba(52, 152, 219, 0.95);
+            border-color: #cceeff;
         }
 
-        .reset-icon {
+        /* small reset button */
+        .reset-circle {
             position: absolute;
-            bottom: 28px;
-            right: 24px;
-            background: rgba(0,0,0,0.65);
+            bottom: 32px;
+            right: 22px;
+            background: rgba(0,0,0,0.7);
             backdrop-filter: blur(8px);
-            width: 60px;
-            height: 60px;
-            border-radius: 40px;
+            width: 58px;
+            height: 58px;
+            border-radius: 50px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 2rem;
             font-weight: bold;
-            color: #FFB347;
-            border: 1px solid #ffbb66;
+            color: #FFBB55;
+            border: 1px solid #ffaa55;
             pointer-events: auto;
             cursor: pointer;
-            z-index: 25;
+            z-index: 35;
             transition: 0.05s linear;
             touch-action: manipulation;
         }
 
-        .reset-icon:active {
-            transform: scale(0.94);
-            background: rgba(0,0,0,0.9);
+        .reset-circle:active {
+            transform: scale(0.92);
+            background: #000000aa;
         }
 
-        .gyro-tag {
+        .gyro-badge {
             position: absolute;
             top: 18px;
             right: 18px;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(6px);
             border-radius: 40px;
-            padding: 5px 12px;
-            font-size: 0.7rem;
-            color: #dddd99;
+            padding: 5px 14px;
+            font-size: 0.75rem;
             font-weight: bold;
-            backdrop-filter: blur(5px);
-            pointer-events: none;
-            z-index: 10;
+            color: #f5e56b;
             font-family: monospace;
+            pointer-events: none;
+            z-index: 20;
         }
 
-        /* crash overlay minimalist */
-        .crash-toast {
-            position: absolute;
-            top: 40%;
-            left: 0;
-            right: 0;
-            text-align: center;
-            font-size: 2.6rem;
-            font-weight: 800;
-            color: #FFB347;
-            text-shadow: 0 3px 0 #5a2e00;
-            background: none;
-            pointer-events: none;
-            z-index: 30;
-            font-family: monospace;
-            letter-spacing: 4px;
-        }
-
-        @media (max-width: 700px) {
-            .action-btn { padding: 14px 0; font-size: 1.8rem; max-width: 140px; }
-            .stat-card { font-size: 1rem; padding: 4px 12px; }
-            .reset-icon { width: 52px; height: 52px; font-size: 1.8rem; bottom: 22px; right: 18px; }
-            .gyro-tag { font-size: 0.6rem; top: 12px; right: 12px; }
+        @media (max-width: 650px) {
+            .ctrl-big { padding: 14px 0; font-size: 1.7rem; max-width: 140px; }
+            .stat-bubble { font-size: 1rem; padding: 4px 12px; }
+            .reset-circle { width: 50px; height: 50px; font-size: 1.7rem; bottom: 24px; right: 16px; }
+            .gyro-badge { font-size: 0.65rem; top: 12px; right: 12px; }
         }
     </style>
 </head>
 <body>
-<div class="game-full">
+<div class="game-screen">
     <canvas id="gameCanvas"></canvas>
     
-    <!-- MINIMAL GUI: only stats + gas/brake + tiny reset -->
-    <div class="stats-simple">
-        <div class="stat-card">🏁 <span id="distValue">0</span>m</div>
-        <div class="stat-card">⚡ <span id="speedValue">0</span>km/h</div>
-        <div class="stat-card">⛽ <span id="fuelValue">100</span>%</div>
+    <!-- minimal GUI: only distance and speed -->
+    <div class="stats-mini">
+        <div class="stat-bubble">🏁 <span id="distanceMeter">0</span> m</div>
+        <div class="stat-bubble">⚡ <span id="speedNumber">0</span> km/h</div>
     </div>
-    <div class="gyro-tag" id="gyroStatusText">📳 TILT TO STEER</div>
+    <div class="gyro-badge" id="gyroIndicator">📳 TILT TO STEER</div>
     
-    <div class="button-bar">
-        <div class="action-btn gas" id="gasButton">⛽ GAS</div>
-        <div class="action-btn brake" id="brakeButton">🛑 BRAKE</div>
+    <div class="control-panel">
+        <div class="ctrl-big gas-btn" id="gasControl">⛽ GAS</div>
+        <div class="ctrl-big brake-btn" id="brakeControl">🛑 BRAKE</div>
     </div>
-    <div class="reset-icon" id="resetButton">↺</div>
-    <div id="crashMessage" class="crash-toast" style="display: none;">💥 CRASH</div>
+    <div class="reset-circle" id="resetAction">↺</div>
 </div>
 
 <script>
     (function(){
-        // ------------------- SUPER SIMPLE BUT FULL PHYSICS -------------------
+        // ---------- SIMPLE BUT FUN MOTORCYCLE GAME (no fuel, no crash, all working) ----------
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         
-        let width = window.innerWidth;
-        let height = window.innerHeight;
+        let screenW = window.innerWidth;
+        let screenH = window.innerHeight;
         
         function resizeCanvas() {
-            width = window.innerWidth;
-            height = window.innerHeight;
-            canvas.width = width;
-            canvas.height = height;
+            screenW = window.innerWidth;
+            screenH = window.innerHeight;
+            canvas.width = screenW;
+            canvas.height = screenH;
         }
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
         
-        // ---------- WORLD & TERRAIN (endless feeling with hills) ----------
-        const TERRAIN_STEP = 14;
-        const WORLD_WIDTH = 5800;
-        let terrainPoints = [];
+        // ---------- WORLD & TERRAIN (hill climb style, infinite vibe) ----------
+        const STEP = 14;          // terrain step pixels
+        const WORLD_W = 5200;     // world total width
+        let terrain = [];         
         let cameraX = 0;
         
-        // bike physics (simplified but feels like hill climb)
+        // BIKE (simple physics without fuel or game over)
         let bike = {
-            x: 380,
+            x: 380,               // world X
             y: 0,
-            vx: 2.4,
-            vy: 0,
+            vx: 2.2,
             angle: 0,
             angVel: 0,
-            fuel: 100,
-            crashed: false,
-            distance: 0,
-            bestDist: 0
+            distance: 0
         };
         
-        // constants
-        const GRAVITY = 0.52;
-        const ENGINE_FORCE = 0.58;
-        const BRAKE_POWER = 0.82;
-        const WHEEL_BASE = 28;
+        // constants (feels like hill climb but simpler)
+        const GRAVITY = 0.48;
+        const ENGINE_POWER = 0.62;
+        const BRAKE_POWER = 0.78;
+        const WHEELBASE = 27;
         
-        let gasActive = false;
-        let brakeActive = false;
+        // buttons state
+        let gasPressed = false;
+        let brakePressed = false;
         
-        // gyro steering
-        let gyroGamma = 0;
-        let gyroLive = false;
-        let leanInfluence = 0;
+        // gyroscope data
+        let gyroGamma = 0;        // -45..45 left/right tilt
+        let gyroEnabled = false;
+        let steerLean = 0;
         
-        // ---------- FUNCTIONS: TERRAIN generation (hill climb style steep sections) ----------
-        function generateTerrain() {
+        // ---------- generate rolling hills (no extreme cliffs, smooth) ----------
+        function buildTerrain() {
             let points = [];
-            let baseY = height - 110;
-            for (let i = 0; i <= WORLD_WIDTH; i += TERRAIN_STEP) {
+            let baseY = screenH - 98;
+            for (let i = 0; i <= WORLD_W; i += STEP) {
                 let xVal = i;
-                // rolling hills + steep walls
-                let wave1 = Math.sin(xVal * 0.006) * 26;
-                let wave2 = Math.cos(xVal * 0.014) * 18;
-                let wave3 = Math.sin(xVal * 0.025) * 12;
-                let hill = wave1 + wave2 + wave3;
-                // climb zone (nasty hillclimb)
-                if (xVal > 1400 && xVal < 2400) hill += Math.sin((xVal-1400)*0.017) * 28;
-                if (xVal > 3100 && xVal < 3900) hill -= Math.cos((xVal-3100)*0.012) * 32;
-                if (xVal > 4600) hill += Math.sin(xVal*0.009) * 24;
+                // hill formula : hill climb style with climbs and dips
+                let hill1 = Math.sin(xVal * 0.0055) * 24;
+                let hill2 = Math.cos(xVal * 0.011) * 18;
+                let hill3 = Math.sin(xVal * 0.024) * 12;
+                let elevation = hill1 + hill2 + hill3;
+                // make steep section but not frustrating
+                if (xVal > 1300 && xVal < 2100) elevation += Math.sin((xVal-1300)*0.018) * 22;
+                if (xVal > 2900 && xVal < 3600) elevation -= Math.cos((xVal-2900)*0.013) * 26;
+                if (xVal > 4300) elevation += Math.sin(xVal*0.009) * 20;
                 
-                let yPos = baseY - hill;
-                yPos = Math.min(height - 55, Math.max(height - 155, yPos));
+                let yPos = baseY - elevation;
+                yPos = Math.min(screenH - 52, Math.max(screenH - 142, yPos));
                 points.push({ x: i, y: yPos });
             }
-            // smoothing pass (mild)
-            for (let p = 0; p < 2; p++) {
+            // light smoothing to avoid micro-jitter
+            for (let smooth = 0; smooth < 2; smooth++) {
                 for (let i = 1; i < points.length-1; i++) {
                     points[i].y = (points[i-1].y + points[i].y + points[i+1].y) / 3;
                 }
@@ -297,131 +274,133 @@
             return points;
         }
         
+        // get ground Y at any world X
         function getGroundY(worldX) {
-            if (worldX <= 0) return terrainPoints[0].y;
-            if (worldX >= WORLD_WIDTH) return terrainPoints[terrainPoints.length-1].y;
-            let idx = Math.floor(worldX / TERRAIN_STEP);
-            idx = Math.min(idx, terrainPoints.length-2);
-            let t = (worldX - terrainPoints[idx].x) / TERRAIN_STEP;
-            return terrainPoints[idx].y + (terrainPoints[idx+1].y - terrainPoints[idx].y) * t;
+            if (worldX <= 0) return terrain[0].y;
+            if (worldX >= WORLD_W) return terrain[terrain.length-1].y;
+            let idx = Math.floor(worldX / STEP);
+            idx = Math.min(idx, terrain.length-2);
+            let t = (worldX - terrain[idx].x) / STEP;
+            return terrain[idx].y + (terrain[idx+1].y - terrain[idx].y) * t;
         }
         
+        // ground slope (radians)
         function getGroundSlope(worldX) {
-            let leftY = getGroundY(worldX - 6);
-            let rightY = getGroundY(worldX + 6);
-            return Math.atan2(rightY - leftY, 12);
+            let left = getGroundY(worldX - 6);
+            let right = getGroundY(worldX + 6);
+            return Math.atan2(right - left, 12);
         }
         
-        // ---------- PHYSICS (responsive + rollover crash) ----------
+        // ---------- PHYSICS UPDATE (no crash, no fuel, just pure driving) ----------
         function updateGame(dt) {
-            if (bike.crashed) return;
             dt = Math.min(dt, 0.033);
             
-            // throttle & fuel
-            let acceleration = 0;
-            if (gasActive && bike.fuel > 0) {
-                acceleration = ENGINE_FORCE;
-                bike.fuel -= 0.28 * dt * 8;
-                if (bike.fuel < 0) bike.fuel = 0;
-            }
-            if (brakeActive) acceleration = -BRAKE_POWER;
+            // acceleration from gas/brake
+            let acc = 0;
+            if (gasPressed) acc = ENGINE_POWER;
+            if (brakePressed) acc = -BRAKE_POWER;
             
             let slope = getGroundSlope(bike.x);
-            let gravityPush = Math.sin(slope) * GRAVITY * 0.68;
-            bike.vx += (acceleration - gravityPush) * dt;
-            // friction
-            let tireFriction = 0.985;
-            if (Math.abs(bike.vx) < 0.8) tireFriction = 0.99;
-            bike.vx *= (1 - (1-tireFriction) * dt * 2.5);
-            // speed limits
-            bike.vx = Math.min(48, Math.max(-13, bike.vx));
+            let gravityComponent = Math.sin(slope) * GRAVITY * 0.65;
+            bike.vx += (acc - gravityComponent) * dt;
             
-            // move bike
+            // friction and speed limit
+            let friction = 0.986;
+            if (Math.abs(bike.vx) < 1.2) friction = 0.992;
+            bike.vx *= (1 - (1-friction) * dt * 2.2);
+            bike.vx = Math.min(44, Math.max(-12, bike.vx));
+            
+            // update position
             let newX = bike.x + bike.vx * dt * 2.3;
-            if (newX > 55 && newX < WORLD_WIDTH - 55) bike.x = newX;
+            if (newX > 60 && newX < WORLD_W - 60) bike.x = newX;
             else {
-                if (newX <= 55) { bike.x = 55; if(bike.vx < 0) bike.vx = 0; }
-                if (newX >= WORLD_WIDTH-55) { bike.x = WORLD_WIDTH-55; if(bike.vx > 0) bike.vx = 0; }
+                if (newX <= 60) { bike.x = 60; if(bike.vx < 0) bike.vx = 0; }
+                if (newX >= WORLD_W-60) { bike.x = WORLD_W-60; if(bike.vx > 0) bike.vx = 0; }
             }
             
-            // suspension & wheel contact
-            let rearX = bike.x - WHEEL_BASE/2;
-            let frontX = bike.x + WHEEL_BASE/2;
-            let rearGround = getGroundY(rearX);
-            let frontGround = getGroundY(frontX);
-            let wantedBodyY = (rearGround + frontGround) / 2 - 11;
-            bike.y = bike.y * 0.82 + wantedBodyY * 0.18;
+            // wheel contact points (realistic tilt)
+            let rearWX = bike.x - WHEELBASE/2;
+            let frontWX = bike.x + WHEELBASE/2;
+            let rearGround = getGroundY(rearWX);
+            let frontGround = getGroundY(frontWX);
+            let targetBodyY = (rearGround + frontGround) / 2 - 11;
+            bike.y = bike.y * 0.82 + targetBodyY * 0.18;
             
-            // angle from ground + gyro steering torque
-            let terrainAngle = Math.atan2(frontGround - rearGround, WHEEL_BASE);
-            if (gyroLive) {
-                // map gamma (-45...45) to -1..1 lean
-                let leanRaw = Math.min(0.95, Math.max(-0.95, gyroGamma / 48));
-                leanInfluence = leanRaw;
-                let torque = leanInfluence * 3.6 * (Math.abs(bike.vx) * 0.1 + 0.65);
-                bike.angVel += torque * dt * 4.2;
+            // bike angle from terrain + GYRO STEERING (full working)
+            let terrainAngle = Math.atan2(frontGround - rearGround, WHEELBASE);
+            
+            if (gyroEnabled) {
+                // gamma range -50..50 -> -1..1 steering force
+                let rawLean = Math.min(0.95, Math.max(-0.95, gyroGamma / 45));
+                steerLean = rawLean;
+                // gyro torque influences bike angular velocity
+                let gyroTorque = steerLean * 3.2 * (Math.abs(bike.vx) * 0.09 + 0.55);
+                bike.angVel += gyroTorque * dt * 4.0;
             }
-            bike.angVel *= 0.93;
-            bike.angVel += (terrainAngle - bike.angle) * 2.2 * dt;
-            bike.angle += bike.angVel * dt * 3.4;
-            bike.angle = Math.min(0.85, Math.max(-0.85, bike.angle));
+            bike.angVel *= 0.94;
+            bike.angVel += (terrainAngle - bike.angle) * 2.5 * dt;
+            bike.angle += bike.angVel * dt * 3.2;
+            bike.angle = Math.min(0.78, Math.max(-0.78, bike.angle));
             
-            // crash if bike flips too much
-            if (Math.abs(bike.angle) > 0.92 || bike.y < rearGround - 34 || bike.y < frontGround - 34) {
-                bike.crashed = true;
-                document.getElementById('crashMessage').style.display = 'block';
-                setTimeout(() => {
-                    if(bike.crashed) document.getElementById('crashMessage').style.display = 'none';
-                }, 900);
-            }
-            if (bike.fuel <= 0.02) bike.crashed = true;
-            
-            // distance & UI update
-            let meters = Math.floor(bike.x / 5.3);
+            // distance counter (simple progress)
+            let meters = Math.floor(bike.x / 5.2);
             bike.distance = meters;
-            if (meters > bike.bestDist) bike.bestDist = meters;
-            document.getElementById('distValue').innerText = bike.distance;
-            let spdKmh = Math.floor(Math.abs(bike.vx * 2.35));
-            document.getElementById('speedValue').innerText = spdKmh;
-            let fuelPercent = Math.max(0, Math.floor(bike.fuel));
-            document.getElementById('fuelValue').innerHTML = fuelPercent;
+            document.getElementById('distanceMeter').innerText = bike.distance;
+            let speedKmh = Math.floor(Math.abs(bike.vx * 2.45));
+            document.getElementById('speedNumber').innerHTML = speedKmh;
             
-            // camera follow (smooth)
-            let targetCam = bike.x - width/2 + 40;
-            targetCam = Math.min(WORLD_WIDTH - width + 30, Math.max(-20, targetCam));
-            cameraX = cameraX * 0.92 + targetCam * 0.08;
+            // CAMERA smooth follow
+            let targetCam = bike.x - screenW/2 + 38;
+            targetCam = Math.min(WORLD_W - screenW + 40, Math.max(-15, targetCam));
+            cameraX = cameraX * 0.94 + targetCam * 0.06;
         }
         
-        // ---------- DRAW: minimalistic but juicy ----------
+        // ---------- DRAW EVERYTHING (stunning and simple) ----------
+        function drawSkyGround() {
+            let gradSky = ctx.createLinearGradient(0, 0, 0, screenH*0.6);
+            gradSky.addColorStop(0, "#7bc5e6");
+            gradSky.addColorStop(1, "#cfecb0");
+            ctx.fillStyle = gradSky;
+            ctx.fillRect(0, 0, screenW, screenH);
+            // sun & clouds
+            ctx.fillStyle = "#ffffffee";
+            for (let i = 0; i < 3; i++) {
+                let cloudX = (cameraX * 0.12 + i * 215) % (screenW + 300) - 120;
+                ctx.beginPath();
+                ctx.ellipse(cloudX, 52, 36, 28, 0, 0, Math.PI*2);
+                ctx.ellipse(cloudX+28, 45, 32, 26, 0, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+        
         function drawTerrain() {
-            let startIdx = Math.max(0, Math.floor(cameraX / TERRAIN_STEP));
-            let endIdx = Math.min(terrainPoints.length-1, Math.floor((cameraX+width)/TERRAIN_STEP) + 3);
-            ctx.fillStyle = '#5b3c1a';
+            let startIdx = Math.max(0, Math.floor(cameraX / STEP));
+            let endIdx = Math.min(terrain.length-1, Math.floor((cameraX+screenW)/STEP) + 3);
+            ctx.fillStyle = '#604020';
             ctx.beginPath();
-            let first = terrainPoints[startIdx];
-            ctx.moveTo(first.x - cameraX, first.y);
-            for (let i=startIdx+1; i<=endIdx; i++) {
-                let p = terrainPoints[i];
+            let firstPoint = terrain[startIdx];
+            ctx.moveTo(firstPoint.x - cameraX, firstPoint.y);
+            for (let i = startIdx+1; i <= endIdx; i++) {
+                let p = terrain[i];
                 ctx.lineTo(p.x - cameraX, p.y);
             }
-            ctx.lineTo(width, height);
-            ctx.lineTo(0, height);
+            ctx.lineTo(screenW, screenH);
+            ctx.lineTo(0, screenH);
             ctx.fill();
-            // grass strokes
-            ctx.fillStyle = '#548235';
-            for (let i=startIdx; i<=endIdx; i+=3) {
-                let p = terrainPoints[i];
+            
+            // grass details
+            ctx.fillStyle = '#548c34';
+            for (let i = startIdx; i <= endIdx; i+=2) {
+                let p = terrain[i];
                 let sx = p.x - cameraX;
-                ctx.fillRect(sx-3, p.y-6, 5, 9);
+                ctx.fillRect(sx-4, p.y-7, 7, 9);
             }
-            // simple shadow under bike zone
-            ctx.globalAlpha = 0.3;
-            ctx.fillStyle = '#1f2c0a';
-            for (let i=startIdx; i<=endIdx; i+=2) {
-                let p = terrainPoints[i];
-                ctx.fillRect(p.x-cameraX-2, p.y-2, 5, 5);
+            // little dirt patches
+            ctx.fillStyle = '#aa7a4a';
+            for (let i = startIdx; i <= endIdx; i+=3) {
+                let p = terrain[i];
+                ctx.fillRect(p.x-cameraX-2, p.y-3, 4, 4);
             }
-            ctx.globalAlpha = 1;
         }
         
         function drawBike() {
@@ -430,211 +409,197 @@
             ctx.save();
             ctx.translate(screenX, bodyY);
             ctx.rotate(bike.angle);
-            // wheels (big & mean)
-            ctx.fillStyle = '#1f1d1d';
+            
+            // wheels (beefy)
+            ctx.fillStyle = '#222';
             ctx.beginPath();
-            ctx.ellipse(-13, 7, 10, 14, 0, 0, Math.PI*2);
+            ctx.ellipse(-12, 6, 9, 13, 0, 0, Math.PI*2);
             ctx.fill();
             ctx.beginPath();
-            ctx.ellipse(13, 7, 10, 14, 0, 0, Math.PI*2);
+            ctx.ellipse(12, 6, 9, 13, 0, 0, Math.PI*2);
             ctx.fill();
-            ctx.fillStyle = '#999';
+            ctx.fillStyle = '#aaa';
             ctx.beginPath();
-            ctx.arc(-13, 7, 6, 0, Math.PI*2);
+            ctx.arc(-12, 6, 5.5, 0, Math.PI*2);
             ctx.fill();
             ctx.beginPath();
-            ctx.arc(13, 7, 6, 0, Math.PI*2);
+            ctx.arc(12, 6, 5.5, 0, Math.PI*2);
             ctx.fill();
-            // frame & tank
+            
+            // frame & engine
             ctx.beginPath();
-            ctx.moveTo(-12, -1);
-            ctx.lineTo(0, -15);
-            ctx.lineTo(12, -1);
-            ctx.lineTo(6, 8);
-            ctx.lineTo(-6, 8);
-            ctx.fillStyle = '#e65c1e';
+            ctx.moveTo(-11, -1);
+            ctx.lineTo(0, -14);
+            ctx.lineTo(11, -1);
+            ctx.lineTo(5, 7);
+            ctx.lineTo(-5, 7);
+            ctx.fillStyle = '#E35F21';
             ctx.fill();
-            ctx.fillStyle = '#c2450a';
-            ctx.fillRect(-5, -18, 10, 13);
-            // rider (minimal but expressive)
-            ctx.fillStyle = '#26802e';
+            ctx.fillStyle = '#bf4a12';
+            ctx.fillRect(-5, -16, 10, 12);
+            
+            // rider (simple but fun)
+            ctx.fillStyle = '#2d8040';
             ctx.beginPath();
-            ctx.ellipse(0, -22, 7, 11, 0, 0, Math.PI*2);
+            ctx.ellipse(0, -21, 7, 11, 0, 0, Math.PI*2);
             ctx.fill();
-            ctx.fillStyle = '#fbcb8e';
+            ctx.fillStyle = '#fbc28e';
             ctx.beginPath();
-            ctx.arc(0, -28, 5.5, 0, Math.PI*2);
+            ctx.arc(0, -27, 5.8, 0, Math.PI*2);
             ctx.fill();
             ctx.fillStyle = '#000';
-            ctx.fillRect(-2, -30, 2.2, 3);
-            ctx.fillRect(1.2, -30, 2.2, 3);
+            ctx.fillRect(-2, -29, 2.2, 3);
+            ctx.fillRect(1, -29, 2.2, 3);
             ctx.fillStyle = '#dd5522';
             ctx.beginPath();
-            ctx.ellipse(0, -33, 6.5, 5, 0, 0, Math.PI*2);
+            ctx.ellipse(0, -32, 6.8, 5.2, 0, 0, Math.PI*2);
             ctx.fill();
             ctx.restore();
             
-            // gyro lean arrow
-            if (gyroLive && Math.abs(leanInfluence) > 0.08) {
-                ctx.font = "bold 21px monospace";
-                ctx.fillStyle = "#FFFAC2";
+            // gyro steering arrow (visual feedback)
+            if (gyroEnabled && Math.abs(steerLean) > 0.07) {
+                ctx.font = "bold 24px monospace";
+                ctx.fillStyle = "#FFF8CF";
                 ctx.shadowBlur = 0;
-                ctx.fillText(leanInfluence > 0 ? "↷" : "↶", screenX-28, bodyY-32);
+                ctx.fillText(steerLean > 0 ? "➡️" : "⬅️", screenX-32, bike.y-30);
             }
         }
         
-        function drawSkyAndStatic() {
-            let grad = ctx.createLinearGradient(0, 0, 0, height*0.6);
-            grad.addColorStop(0, "#7bc5e6");
-            grad.addColorStop(1, "#cdeda5");
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, width, height);
-            // clouds
-            ctx.fillStyle = "#ffffffee";
-            for (let i = 0; i < 3; i++) {
-                let cloudX = (cameraX * 0.15 + i * 240) % (width + 280) - 110;
-                ctx.beginPath();
-                ctx.ellipse(cloudX, 48, 38, 32, 0, 0, Math.PI*2);
-                ctx.ellipse(cloudX+33, 42, 33, 28, 0, 0, Math.PI*2);
-                ctx.ellipse(cloudX-26, 44, 32, 27, 0, 0, Math.PI*2);
-                ctx.fill();
-            }
-        }
-        
-        function drawCrashGlow() {
-            if (bike.crashed) {
-                ctx.fillStyle = "#ff000022";
-                ctx.fillRect(0,0,width,height);
-                ctx.font = "bold 44px monospace";
-                ctx.fillStyle = "#ffae42";
-                ctx.shadowBlur = 8;
-                ctx.fillText("💥", width/2-38, height/2-60);
-            }
-        }
-        
-        function renderFull() {
-            drawSkyAndStatic();
+        function render() {
+            drawSkyGround();
             drawTerrain();
             drawBike();
-            drawCrashGlow();
-            // tiny fuel indicator overlay bar
-            let fuelWidth = (bike.fuel / 100) * 70;
-            ctx.fillStyle = "#2c2b1fcc";
-            ctx.fillRect(18, height-32, 76, 12);
-            ctx.fillStyle = "#f5a342";
-            ctx.fillRect(19, height-31, fuelWidth, 10);
+            // tiny extra speed effect
+            if (Math.abs(bike.vx) > 16 && gasPressed) {
+                ctx.fillStyle = "#ffdd88aa";
+                ctx.fillRect(0,0,screenW, screenH);
+            }
         }
         
-        // ---------- RESET FUNCTION ----------
-        function resetGame() {
-            terrainPoints = generateTerrain();
+        // ---------- RESET FUNCTION (full restart) ----------
+        function resetRide() {
+            terrain = buildTerrain();
             bike = {
                 x: 380,
-                y: getGroundY(380)-13,
-                vx: 2.1,
-                vy: 0,
+                y: getGroundY(380)-11,
+                vx: 2.0,
                 angle: 0,
                 angVel: 0,
-                fuel: 100,
-                crashed: false,
-                distance: 0,
-                bestDist: 0
+                distance: 0
             };
-            gasActive = false;
-            brakeActive = false;
             cameraX = 0;
-            leanInfluence = 0;
-            document.getElementById('crashMessage').style.display = 'none';
-            document.getElementById('fuelValue').innerHTML = "100";
-            document.getElementById('distValue').innerText = "0";
+            steerLean = 0;
+            gyroGamma = 0;
+            gasPressed = false;
+            brakePressed = false;
+            document.getElementById('distanceMeter').innerText = "0";
+            document.getElementById('speedNumber').innerHTML = "0";
         }
         
-        // ---------- GYRO (simple & permission) ----------
-        let gyroPermissionRequested = false;
-        function enableGyro() {
+        // ---------- GYROSCOPE HANDLING (super robust) ----------
+        let gyroRequested = false;
+        
+        function enableGyroPermission() {
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 DeviceOrientationEvent.requestPermission()
-                    .then(perm => {
-                        if (perm === 'granted') {
-                            window.addEventListener('deviceorientation', (e) => { if(e.gamma !== undefined) gyroGamma = e.gamma; });
-                            gyroLive = true;
-                            document.getElementById('gyroStatusText').innerHTML = "🎮 GYRO ACTIVE";
+                    .then(permission => {
+                        if (permission === 'granted') {
+                            window.addEventListener('deviceorientation', onGyroUpdate);
+                            gyroEnabled = true;
+                            document.getElementById('gyroIndicator').innerHTML = "🎮 GYRO ACTIVE";
+                        } else {
+                            document.getElementById('gyroIndicator').innerHTML = "⚠️ GYRO BLOCKED";
                         }
-                    }).catch(()=>{ gyroLive = false; });
+                    })
+                    .catch(() => {
+                        document.getElementById('gyroIndicator').innerHTML = "❌ GYRO ERROR";
+                    });
             } else {
-                window.addEventListener('deviceorientation', (e) => { if(e.gamma) gyroGamma = e.gamma; });
-                gyroLive = true;
-                document.getElementById('gyroStatusText').innerHTML = "📳 TILT STEER";
+                // android / desktop fallback
+                window.addEventListener('deviceorientation', onGyroUpdate);
+                gyroEnabled = true;
+                document.getElementById('gyroIndicator').innerHTML = "📳 TILT ACTIVE";
+            }
+            gyroRequested = true;
+        }
+        
+        function onGyroUpdate(event) {
+            if (event.gamma !== undefined && event.gamma !== null) {
+                // gamma: left-right tilt range -90 to 90, we map -50..50 sensibly
+                let raw = event.gamma;
+                raw = Math.min(48, Math.max(-48, raw));
+                gyroGamma = raw;
             }
         }
         
-        function requestGyroOnTouch() {
-            if (!gyroPermissionRequested) {
-                gyroPermissionRequested = true;
-                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    enableGyro();
-                } else {
-                    gyroLive = true;
-                    window.addEventListener('deviceorientation', (e) => { if(e.gamma) gyroGamma = e.gamma; });
-                    document.getElementById('gyroStatusText').innerHTML = "📳 GYRO ON";
-                }
+        // request gyro on first touch (iOS requirement)
+        function requestGyroOnUserTouch() {
+            if (!gyroRequested) {
+                enableGyroPermission();
             }
         }
         
-        // BUTTON HANDLERS (simple)
-        const gasBtn = document.getElementById('gasButton');
-        const brakeBtn = document.getElementById('brakeButton');
-        const resetBtn = document.getElementById('resetButton');
+        // attach gyro request to canvas & buttons (any tap)
+        canvas.addEventListener('touchstart', () => requestGyroOnUserTouch());
+        canvas.addEventListener('click', () => requestGyroOnUserTouch());
+        document.getElementById('gasControl').addEventListener('touchstart', () => requestGyroOnUserTouch());
+        document.getElementById('brakeControl').addEventListener('touchstart', () => requestGyroOnUserTouch());
         
-        function setGas(state) { gasActive = state; }
-        function setBrake(state) { brakeActive = state; }
+        // ---------- BUTTONS (gas, brake, reset) fully working ----------
+        const gasElement = document.getElementById('gasControl');
+        const brakeElement = document.getElementById('brakeControl');
+        const resetElement = document.getElementById('resetAction');
         
-        gasBtn.addEventListener('mousedown', (e) => { e.preventDefault(); setGas(true); });
-        gasBtn.addEventListener('mouseup', () => setGas(false));
-        gasBtn.addEventListener('mouseleave', () => setGas(false));
-        gasBtn.addEventListener('touchstart', (e) => { e.preventDefault(); setGas(true); });
-        gasBtn.addEventListener('touchend', () => setGas(false));
+        // GAS
+        gasElement.addEventListener('mousedown', (e) => { e.preventDefault(); gasPressed = true; });
+        gasElement.addEventListener('mouseup', () => { gasPressed = false; });
+        gasElement.addEventListener('mouseleave', () => { gasPressed = false; });
+        gasElement.addEventListener('touchstart', (e) => { e.preventDefault(); gasPressed = true; });
+        gasElement.addEventListener('touchend', () => { gasPressed = false; });
         
-        brakeBtn.addEventListener('mousedown', (e) => { e.preventDefault(); setBrake(true); });
-        brakeBtn.addEventListener('mouseup', () => setBrake(false));
-        brakeBtn.addEventListener('touchstart', (e) => { e.preventDefault(); setBrake(true); });
-        brakeBtn.addEventListener('touchend', () => setBrake(false));
+        // BRAKE
+        brakeElement.addEventListener('mousedown', (e) => { e.preventDefault(); brakePressed = true; });
+        brakeElement.addEventListener('mouseup', () => { brakePressed = false; });
+        brakeElement.addEventListener('mouseleave', () => { brakePressed = false; });
+        brakeElement.addEventListener('touchstart', (e) => { e.preventDefault(); brakePressed = true; });
+        brakeElement.addEventListener('touchend', () => { brakePressed = false; });
         
-        resetBtn.addEventListener('click', () => resetGame());
-        resetBtn.addEventListener('touchstart', (e) => { e.preventDefault(); resetGame(); });
+        // RESET
+        resetElement.addEventListener('click', () => resetRide());
+        resetElement.addEventListener('touchstart', (e) => { e.preventDefault(); resetRide(); });
         
-        // tap anywhere on canvas to request gyro (iOS)
-        canvas.addEventListener('touchstart', () => requestGyroOnTouch());
-        canvas.addEventListener('click', () => requestGyroOnTouch());
+        // generate initial terrain
+        terrain = buildTerrain();
+        bike.y = getGroundY(bike.x) - 12;
         
-        // GAME LOOP
-        terrainPoints = generateTerrain();
-        bike.y = getGroundY(bike.x)-12;
-        let lastFrame = performance.now();
-        
-        function animate(now) {
-            let dt = Math.min(0.033, (now - lastFrame) / 1000);
+        // animation loop
+        let lastTimestamp = performance.now();
+        function gameLoop(now) {
+            let dt = Math.min(0.033, (now - lastTimestamp) / 1000);
             if (dt > 0.008) updateGame(dt);
-            renderFull();
-            lastFrame = now;
-            requestAnimationFrame(animate);
+            render();
+            lastTimestamp = now;
+            requestAnimationFrame(gameLoop);
         }
         
-        // manually add fallback for orientation
+        // handle window resize to avoid camera glitch
         window.addEventListener('resize', () => {
             resizeCanvas();
-            cameraX = Math.min(WORLD_WIDTH - width + 30, Math.max(-20, cameraX));
+            terrain = buildTerrain();
+            bike.y = getGroundY(bike.x) - 12;
         });
         
-        lastFrame = performance.now();
-        animate(lastFrame);
+        lastTimestamp = performance.now();
+        gameLoop(lastTimestamp);
         
-        // initial gyro hint
+        // small fallback message if gyro never activates
         setTimeout(() => {
-            if (!gyroLive && !gyroPermissionRequested) {
-                document.getElementById('gyroStatusText').innerHTML = "📱 TAP TO ENABLE GYRO";
+            if (!gyroEnabled && !gyroRequested) {
+                document.getElementById('gyroIndicator').innerHTML = "📱 TAP SCREEN FOR GYRO";
+            } else if (gyroEnabled) {
+                document.getElementById('gyroIndicator').innerHTML = "✅ GYRO STEERING";
             }
-        }, 200);
+        }, 400);
     })();
 </script>
 </body>
